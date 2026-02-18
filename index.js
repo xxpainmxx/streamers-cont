@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes } = require('discord.js');
+const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
 const axios = require('axios');
 const fs = require('fs');
 
@@ -35,14 +35,11 @@ const VIEWS_POINTS = [
 ];
 
 // ====================== FUNÇÕES AUXILIARES ======================
-
-// Obter token de acesso Twitch
 async function getTwitchToken() {
   const res = await axios.post(`https://id.twitch.tv/oauth2/token?client_id=${TWITCH_CLIENT_ID}&client_secret=${TWITCH_CLIENT_SECRET}&grant_type=client_credentials`);
   return res.data.access_token;
 }
 
-// Obter dados do VOD
 async function getTwitchVideo(videoId) {
   const token = await getTwitchToken();
   const res = await axios.get(`https://api.twitch.tv/helix/videos?id=${videoId}`, {
@@ -55,41 +52,28 @@ async function getTwitchVideo(videoId) {
   return res.data.data[0];
 }
 
-// Converter duração Twitch (ex: "3h25m12s") para horas completas
 function durationToFullHours(duration) {
   const match = duration.match(/(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?/);
   const hours = parseInt(match[1] || 0);
-  const minutes = parseInt(match[2] || 0);
-  // Cada hora completa = 1 ponto, arredondando para baixo
   return hours;
 }
 
-// Calcular pontos por horas
 function pointsByHours(hours) {
   let points = 0;
-  for (let rule of HOURS_POINTS) {
-    if (hours >= rule.min) points = rule.points;
-  }
+  for (let rule of HOURS_POINTS) if (hours >= rule.min) points = rule.points;
   return points;
 }
 
-// Calcular pontos por views
 function pointsByViews(views) {
-  for (let rule of VIEWS_POINTS) {
-    if (views >= rule.min) return rule.points;
-  }
+  for (let rule of VIEWS_POINTS) if (views >= rule.min) return rule.points;
   return 0;
 }
 
-// Ler data.json
 function readData() {
-  if (!fs.existsSync('data.json')) {
-    fs.writeFileSync('data.json', JSON.stringify({ users: {} }, null, 2));
-  }
+  if (!fs.existsSync('data.json')) fs.writeFileSync('data.json', JSON.stringify({ users: {} }, null, 2));
   return JSON.parse(fs.readFileSync('data.json'));
 }
 
-// Salvar data.json
 function saveData(data) {
   fs.writeFileSync('data.json', JSON.stringify(data, null, 2));
 }
@@ -135,11 +119,22 @@ client.on('interactionCreate', async interaction => {
 
     const totalUserPoints = data.users[userId].points;
 
-    // ✅ Envia resultado **somente no canal onde o comando foi usado**
-    interaction.reply({
-      content: `📊 VOD contabilizado!\n🎥 Views: **${views}**\n⏱️ Duração: **${hours} horas**\n🏆 Pontos desta live: **${totalPoints}**\n💰 Total de pontos: **${totalUserPoints}**`,
-      ephemeral: false // se o canal é privado, só o usuário verá
-    });
+    // ✅ Mensagem usando Embed
+    const embed = new EmbedBuilder()
+      .setColor('#0099ff')
+      .setTitle('📊 VOD contabilizado!')
+      .setDescription('Seu VOD foi registrado com sucesso!')
+      .addFields(
+        { name: '👤 Usuário', value: `${interaction.user.username}`, inline: true },
+        { name: '🎥 Views', value: `${views}`, inline: true },
+        { name: '⏱️ Duração', value: `${hours} horas`, inline: true },
+        { name: '🏆 Pontos da Live', value: `${totalPoints}`, inline: true },
+        { name: '💰 Total de Pontos', value: `${totalUserPoints}`, inline: true }
+      )
+      .setFooter({ text: 'Texas RP - Sistema de Pontos' })
+      .setTimestamp();
+
+    interaction.reply({ embeds: [embed] });
   }
 });
 
